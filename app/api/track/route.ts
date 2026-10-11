@@ -9,12 +9,63 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 type TrackBody = {
   action?: unknown;
   visitor_key?: unknown;
+  page_visit_key?: unknown;
+  page_url?: unknown;
   page_path?: unknown;
   utm_source?: unknown;
   referrer?: unknown;
   page_history_id?: unknown;
   duration_seconds?: unknown;
+  name?: unknown;
+  email?: unknown;
 };
+
+const defaultWebsiteOrigins = ["https://www.amustafatraders.com", "https://amustafatraders.com"];
+
+function normalizeOrigin(value: string) {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function getAllowedOrigins() {
+  const configured = process.env.WEBSITE_TRACKING_ALLOWED_ORIGINS
+    ?.split(",")
+    .map((origin) => normalizeOrigin(origin.trim()))
+    .filter((origin): origin is string => Boolean(origin));
+  const origins = new Set(configured?.length ? configured : defaultWebsiteOrigins);
+
+  if (process.env.NODE_ENV !== "production") {
+    origins.add("http://localhost:3000");
+    origins.add("http://localhost:3001");
+    origins.add("http://127.0.0.1:3000");
+  }
+
+  return origins;
+}
+
+function corsHeaders(request: Request) {
+  const origin = request.headers.get("origin");
+  const headers = new Headers({ Vary: "Origin" });
+  if (origin && getAllowedOrigins().has(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    headers.set("Access-Control-Allow-Headers", "Content-Type");
+    headers.set("Access-Control-Max-Age", "86400");
+  }
+  return headers;
+}
+
+function isAllowedRequestOrigin(request: Request) {
+  const origin = request.headers.get("origin");
+  return Boolean(origin && getAllowedOrigins().has(origin));
+}
+
+function jsonResponse(request: Request, body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: corsHeaders(request) });
+}
 
 function cleanText(value: unknown, maxLength: number) {
   if (typeof value !== "string") return null;
@@ -43,7 +94,15 @@ function getSource(utmSource: string | null, referrer: string | null, requestHos
   try {
     const referrerUrl = new URL(referrer);
     const referrerHost = referrerUrl.hostname.toLowerCase().replace(/^www\./, "");
-    const currentHost = requestHost?.toLowerCase().split(":")[0].replace(/^www\./, "");
+    let currentHost = requestHost?.toLowerCase() ?? null;
+    if (currentHost) {
+      try {
+        currentHost = new URL(currentHost).hostname.toLowerCase();
+      } catch {
+        currentHost = currentHost.split(":")[0];
+      }
+      currentHost = currentHost.replace(/^www\./, "");
+    }
     if (!referrerUrl.protocol.startsWith("http") || referrerHost === currentHost) return "direct";
 
     if (/(^|\.)(google\.[a-z.]+)$/.test(referrerHost)) return "google";
@@ -84,7 +143,19 @@ function getLocation(request: Request) {
   };
 }
 
-function validPagePath(value: unknown) {
+function validPagePath(value: unknown, allowedPageOrigins: Set<string>) {
+  if (typeof value !== "string" || value.length > 4096) return null;
+  try {
+    const parsed = new URL(value);
+    if (!/^https?:$/.test(parsed.protocol) || !allowedPageOrigins.has(parsed.origin)) return null;
+    const pagePath = `${parsed.pathname}${parsed.hash}`;
+    return pagePath.length <= 2048 && !/[\\\u0000-\u001f]/.test(pagePath) ? pagePath : null;
+  } catch {
+    return null;
+  }
+}
+
+function validLegacyPagePath(value: unknown) {
   if (typeof value !== "string" || value.length > 2048 || !value.startsWith("/") || value.startsWith("//")) {
     return null;
   }
@@ -92,43 +163,100 @@ function validPagePath(value: unknown) {
 
   try {
     const parsed = new URL(value, "https://amt.invalid");
-    return parsed.origin === "https://amt.invalid" ? parsed.pathname : null;
+    return parsed.origin === "https://amt.invalid" ? `${parsed.pathname}${parsed.hash}` : null;
   } catch {
     return null;
   }
 }
 
-function failure() {
-  return NextResponse.json({ error: "Tracking is temporarily unavailable." }, { status: 503 });
+function failure(request: Request) {
+  return jsonResponse(request, { error: "Tracking is temporarily unavailable." }, 503);
+}
+
+export async function OPTIONS(request: Request) {
+  if (!isAllowedRequestOrigin(request)) {
+    return new NextResponse(null, { status: 403, headers: corsHeaders(request) });
+  }
+  return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
 }
 
 export async function POST(request: Request) {
+  if (!isAllowedRequestOrigin(request)) {
+    return jsonResponse(request, { error: "Origin is not allowed." }, 403);
+  }
+
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 16_384) return jsonResponse(request, { error: "Request is too large." }, 413);
+
   let body: TrackBody;
   try {
     body = (await request.json()) as TrackBody;
   } catch {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    return jsonResponse(request, { error: "Invalid request." }, 400);
   }
 
   const visitorKey = typeof body.visitor_key === "string" ? body.visitor_key : "";
   if (!uuidPattern.test(visitorKey)) {
-    return NextResponse.json({ error: "Invalid visitor key." }, { status: 400 });
+    return jsonResponse(request, { error: "Invalid visitor key." }, 400);
   }
 
   try {
     const supabase = getSupabaseAdminClient();
 
-    if (body.action === "duration") {
-      const pageHistoryId = typeof body.page_history_id === "string" ? body.page_history_id : "";
+    if (body.action === "identify") {
+      const name = cleanText(body.name, 120);
+      const email = cleanText(body.email, 254)?.toLowerCase() ?? null;
+      if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return jsonResponse(request, { error: "Enter a valid name and email." }, 400);
+      }
+
+      const { data: visitor, error } = await supabase
+        .from("website_visitors")
+        .update({ name, email, updated_at: new Date().toISOString() })
+        .eq("visitor_key", visitorKey)
+        .select("id")
+        .maybeSingle();
+
+      if (error) return failure(request);
+      if (!visitor) return jsonResponse(request, { error: "Visitor has not been tracked yet." }, 404);
+      return jsonResponse(request, { success: true });
+    }
+
+    if (body.action === "page_duration" || body.action === "duration") {
       const seconds = body.duration_seconds;
-      if (
-        !uuidPattern.test(pageHistoryId) ||
-        typeof seconds !== "number" ||
-        !Number.isInteger(seconds) ||
-        seconds < 0 ||
-        seconds > 604800
-      ) {
-        return NextResponse.json({ error: "Invalid duration update." }, { status: 400 });
+      if (typeof seconds !== "number" || !Number.isInteger(seconds) || seconds < 0 || seconds > 604800) {
+        return jsonResponse(request, { error: "Invalid duration update." }, 400);
+      }
+
+      if (body.action === "page_duration") {
+        const pageVisitKey = typeof body.page_visit_key === "string" ? body.page_visit_key : "";
+        if (!uuidPattern.test(pageVisitKey)) {
+          return jsonResponse(request, { error: "Invalid page visit key." }, 400);
+        }
+
+        const { data: visitor, error: visitorError } = await supabase
+          .from("website_visitors")
+          .select("id")
+          .eq("visitor_key", visitorKey)
+          .maybeSingle();
+        if (visitorError) return failure(request);
+        if (!visitor) return jsonResponse(request, { error: "Visitor has not been tracked yet." }, 404);
+
+        const { data: page, error } = await supabase
+          .from("website_page_history")
+          .update({ duration_seconds: seconds })
+          .eq("page_visit_key", pageVisitKey)
+          .eq("visitor_id", visitor.id)
+          .select("id")
+          .maybeSingle();
+        if (error) return failure(request);
+        if (!page) return jsonResponse(request, { error: "Page visit was not found." }, 404);
+        return jsonResponse(request, { success: true });
+      }
+
+      const pageHistoryId = typeof body.page_history_id === "string" ? body.page_history_id : "";
+      if (!uuidPattern.test(pageHistoryId)) {
+        return jsonResponse(request, { error: "Invalid duration update." }, 400);
       }
 
       const { data: visitor, error: visitorError } = await supabase
@@ -136,28 +264,47 @@ export async function POST(request: Request) {
         .select("id")
         .eq("visitor_key", visitorKey)
         .maybeSingle();
-      if (visitorError || !visitor) return failure();
+      if (visitorError || !visitor) return failure(request);
 
       const { error } = await supabase
         .from("website_page_history")
         .update({ duration_seconds: seconds })
         .eq("id", pageHistoryId)
         .eq("visitor_id", visitor.id);
-      if (error) return failure();
-      return new NextResponse(null, { status: 204 });
+      if (error) return failure(request);
+      return new NextResponse(null, { status: 204, headers: corsHeaders(request) });
     }
 
-    if (body.action !== "entry") {
-      return NextResponse.json({ error: "Invalid tracking action." }, { status: 400 });
+    if (body.action !== "page_view" && body.action !== "entry") {
+      return jsonResponse(request, { error: "Invalid tracking action." }, 400);
     }
 
-    const pagePath = validPagePath(body.page_path);
-    if (!pagePath) return NextResponse.json({ error: "Invalid page path." }, { status: 400 });
+    const allowedOrigins = getAllowedOrigins();
+    const pagePath = body.action === "page_view"
+      ? validPagePath(body.page_url, allowedOrigins)
+      : validLegacyPagePath(body.page_path);
+    if (!pagePath) return jsonResponse(request, { error: "Invalid page URL or path." }, 400);
+
+    const pageVisitKey = body.action === "page_view"
+      ? (typeof body.page_visit_key === "string" ? body.page_visit_key : "")
+      : null;
+    if (body.action === "page_view" && !uuidPattern.test(pageVisitKey ?? "")) {
+      return jsonResponse(request, { error: "Invalid page visit key." }, 400);
+    }
+
+    let pageOrigin = request.headers.get("origin");
+    if (body.action === "page_view" && typeof body.page_url === "string") {
+      try {
+        pageOrigin = new URL(body.page_url).origin;
+      } catch {
+        pageOrigin = request.headers.get("origin");
+      }
+    }
 
     const source = getSource(
       cleanText(body.utm_source, 100),
       cleanText(body.referrer, 2048),
-      request.headers.get("x-forwarded-host") ?? request.headers.get("host")
+      pageOrigin
     );
     const location = getLocation(request);
     const now = new Date().toISOString();
@@ -168,7 +315,7 @@ export async function POST(request: Request) {
       .eq("visitor_key", visitorKey)
       .maybeSingle();
 
-    if (lookupError) return failure();
+    if (lookupError) return failure(request);
 
     if (!visitor) {
       const { data: created, error: createError } = await supabase
@@ -195,9 +342,9 @@ export async function POST(request: Request) {
           .eq("visitor_key", visitorKey)
           .single();
         visitor = retry.data;
-        if (retry.error || !visitor) return failure();
+        if (retry.error || !visitor) return failure(request);
       } else {
-        if (createError || !created) return failure();
+        if (createError || !created) return failure(request);
         visitor = created;
       }
     }
@@ -221,19 +368,37 @@ export async function POST(request: Request) {
       .from("website_visitors")
       .update(updates)
       .eq("id", visitor.id);
-    if (updateError) return failure();
+    if (updateError) return failure(request);
 
-    const { data: pageHistory, error: historyError } = await supabase
+    const insert = await supabase
       .from("website_page_history")
-      .insert({ visitor_id: visitor.id, page_path: pagePath })
+      .insert({
+        visitor_id: visitor.id,
+        page_path: pagePath,
+        ...(pageVisitKey ? { page_visit_key: pageVisitKey } : {})
+      })
       .select("id")
       .single();
-    if (historyError || !pageHistory) return failure();
 
-    return NextResponse.json({ page_history_id: pageHistory.id }, { status: 201 });
+    if (insert.error?.code === "23505" && pageVisitKey) {
+      const duplicate = await supabase
+        .from("website_page_history")
+        .select("visitor_id, page_path")
+        .eq("page_visit_key", pageVisitKey)
+        .maybeSingle();
+      if (duplicate.error) return failure(request);
+      if (duplicate.data?.visitor_id !== visitor.id || duplicate.data.page_path !== pagePath) {
+        return jsonResponse(request, { error: "Page visit key is already in use." }, 409);
+      }
+      return jsonResponse(request, { success: true });
+    }
+
+    if (insert.error || !insert.data) return failure(request);
+
+    return jsonResponse(request, { success: true }, 201);
   } catch {
     // Do not include request data, IP headers, or secrets in server logs.
     console.error("[visitor tracking] server operation failed");
-    return failure();
+    return failure(request);
   }
 }

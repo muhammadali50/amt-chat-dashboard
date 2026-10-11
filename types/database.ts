@@ -43,6 +43,7 @@ export type WebsiteVisitor = {
 export type WebsitePageHistory = {
   id: string;
   visitor_id: string;
+  page_visit_key: string | null;
   page_path: string;
   entered_at: string;
   duration_seconds: number;
@@ -82,8 +83,9 @@ export interface Database {
       };
       website_page_history: {
         Row: WebsitePageHistory;
-        Insert: Omit<WebsitePageHistory, "id" | "entered_at" | "duration_seconds"> & {
+        Insert: Omit<WebsitePageHistory, "id" | "entered_at" | "duration_seconds" | "page_visit_key"> & {
           id?: string;
+          page_visit_key?: string | null;
           entered_at?: string;
           duration_seconds?: number;
         };
