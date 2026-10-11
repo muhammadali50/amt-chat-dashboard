@@ -12,7 +12,7 @@ create table if not exists public.conversations (
   unread_count integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint conversations_platform_check check (platform in ('instagram', 'facebook')),
+  constraint conversations_platform_check check (platform in ('instagram', 'facebook', 'whatsapp')),
   constraint conversations_status_check check (status in ('active', 'resolved')),
   constraint conversations_platform_user_unique unique (platform, platform_user_id)
 );

@@ -1,4 +1,4 @@
-export type Platform = "instagram" | "facebook";
+export type Platform = "instagram" | "facebook" | "whatsapp";
 export type SenderType = "user" | "bot";
 export type ConversationStatus = "active" | "resolved";
 

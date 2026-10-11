@@ -49,7 +49,9 @@ function Avatar({
   const palette =
     conversation.platform === "instagram"
       ? "from-[#f7d7bc] to-[#f3a7b7] text-[#8f171d]"
-      : "from-blue-100 to-sky-200 text-blue-800";
+      : conversation.platform === "whatsapp"
+        ? "from-emerald-100 to-green-200 text-emerald-800"
+        : "from-blue-100 to-sky-200 text-blue-800";
 
   return (
     <div
@@ -228,7 +230,7 @@ export function ConversationDashboard({
             Conversations
           </h1>
           <p className="mt-1 hidden text-sm text-stone-500 sm:block">
-            Review customer enquiries from Instagram and Facebook.
+            Review customer enquiries from Instagram, Facebook, and WhatsApp.
           </p>
         </div>
 
@@ -278,7 +280,7 @@ export function ConversationDashboard({
               </label>
 
               <div className="mt-3 flex gap-2">
-                {(["all", "instagram", "facebook"] as Filter[]).map((item) => (
+                {(["all", "instagram", "facebook", "whatsapp"] as Filter[]).map((item) => (
                   <button
                     key={item}
                     onClick={() => setFilter(item)}
@@ -289,7 +291,7 @@ export function ConversationDashboard({
                         : "bg-stone-100 text-stone-500 hover:bg-stone-200")
                     }
                   >
-                    {item}
+                    {item === "all" ? "All" : item[0].toUpperCase() + item.slice(1)}
                   </button>
                 ))}
               </div>
