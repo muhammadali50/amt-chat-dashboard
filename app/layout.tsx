@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { VisitorTracker } from "@/components/visitor-tracker";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "A Mustafa Traders | Chat Dashboard",
-  description: "Facebook and Instagram customer conversation history for A Mustafa Traders"
+  description: "Customer conversation history and website visitor insights for A Mustafa Traders"
 };
 
 export default function RootLayout({
@@ -13,7 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Suspense fallback={null}>
+          <VisitorTracker />
+        </Suspense>
+        {children}
+      </body>
     </html>
   );
 }

@@ -11,6 +11,8 @@ A responsive Facebook, Instagram, and WhatsApp conversation dashboard for A Must
 
 ## Optional Supabase connection
 
-Run \`supabase/schema.sql\` in the Supabase SQL editor, optionally run \`supabase/seed.sql\`, then add the project URL and anon key to \`.env.local\`. To enable WhatsApp conversations on an existing database, run \`supabase/migrations/20261011000000_add_whatsapp_platform.sql\` in the SQL editor. Store each WhatsApp customer thread in \`conversations\` with \`platform = 'whatsapp'\`, and its incoming/outgoing messages in \`messages\`; the dashboard loads these rows and receives realtime updates.
+Run \`supabase/schema.sql\` in the Supabase SQL editor, optionally run \`supabase/seed.sql\`, then add your Supabase project URL, anon key, and service role key to \`.env.local\`. The anon key is used by the existing browser/dashboard client. Privileged server code can use \`getSupabaseAdminClient\` from \`lib/supabase-admin.ts\`; the module is server-only and must never be imported into client components. Keep \`SUPABASE_SERVICE_ROLE_KEY\` private.
+
+To enable WhatsApp conversations on an existing database, run \`supabase/migrations/20261011000000_add_whatsapp_platform.sql\` in the SQL editor. Store each WhatsApp customer thread in \`conversations\` with \`platform = 'whatsapp'\`, and its incoming/outgoing messages in \`messages\`; the dashboard loads these rows and receives realtime updates.
 
 The dashboard is intentionally read-only. Authentication and reply controls should be added before production use.

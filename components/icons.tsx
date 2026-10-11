@@ -32,6 +32,13 @@ export const AnalyticsIcon = (props: IconProps) => (
   </Icon>
 );
 
+export const VisitorsIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <circle cx="9" cy="8" r="3" />
+    <path d="M3 20v-1a6 6 0 0 1 12 0v1M17 5.5a3 3 0 0 1 0 5.8M18 14a5 5 0 0 1 3 4.6V20" />
+  </Icon>
+);
+
 export const SettingsIcon = (props: IconProps) => (
   <Icon {...props}>
     <circle cx="12" cy="12" r="3" />

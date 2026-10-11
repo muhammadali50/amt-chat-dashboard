@@ -24,26 +24,70 @@ export interface Message {
   created_at: string;
 }
 
+export type WebsiteVisitor = {
+  id: string;
+  visitor_key: string;
+  name: string | null;
+  email: string | null;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  first_source: string;
+  last_source: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WebsitePageHistory = {
+  id: string;
+  visitor_id: string;
+  page_path: string;
+  entered_at: string;
+  duration_seconds: number;
+};
+
 export interface Database {
   public: {
     Tables: {
       conversations: {
-        Row: Conversation;
-        Insert: Omit<Conversation, "id" | "created_at" | "updated_at"> & {
+        Row: Conversation & Record<string, unknown>;
+        Insert: (Omit<Conversation, "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        }) & Record<string, unknown>;
+        Update: Partial<Conversation> & Record<string, unknown>;
+        Relationships: [];
+      };
+      messages: {
+        Row: Message & Record<string, unknown>;
+        Insert: (Omit<Message, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        }) & Record<string, unknown>;
+        Update: Partial<Message> & Record<string, unknown>;
+        Relationships: [];
+      };
+      website_visitors: {
+        Row: WebsiteVisitor;
+        Insert: Omit<WebsiteVisitor, "id" | "created_at" | "updated_at"> & {
           id?: string;
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Conversation>;
+        Update: Partial<WebsiteVisitor>;
         Relationships: [];
       };
-      messages: {
-        Row: Message;
-        Insert: Omit<Message, "id" | "created_at"> & {
+      website_page_history: {
+        Row: WebsitePageHistory;
+        Insert: Omit<WebsitePageHistory, "id" | "entered_at" | "duration_seconds"> & {
           id?: string;
-          created_at?: string;
+          entered_at?: string;
+          duration_seconds?: number;
         };
-        Update: Partial<Message>;
+        Update: Partial<WebsitePageHistory>;
         Relationships: [];
       };
     };

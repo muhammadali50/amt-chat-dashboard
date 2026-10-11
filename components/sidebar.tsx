@@ -1,18 +1,22 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   AnalyticsIcon,
   ChatIcon,
   MenuIcon,
   SettingsIcon,
-  StoreIcon
+  StoreIcon,
+  VisitorsIcon
 } from "@/components/icons";
 
 const navigation = [
-  { label: "Conversations", icon: ChatIcon, active: true },
-  { label: "Analytics", icon: AnalyticsIcon, active: false },
-  { label: "Settings", icon: SettingsIcon, active: false }
+  { label: "Conversations", icon: ChatIcon, href: "/" },
+  { label: "Website Visitors", icon: VisitorsIcon, href: "/visitors" },
+  { label: "Analytics", icon: AnalyticsIcon, href: null },
+  { label: "Settings", icon: SettingsIcon, href: null }
 ];
 
 export function Sidebar({
@@ -22,6 +26,8 @@ export function Sidebar({
   open: boolean;
   onToggle: () => void;
 }) {
+  const pathname = usePathname();
+
   return (
     <>
       {open && (
@@ -73,26 +79,39 @@ export function Sidebar({
           <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
             Workspace
           </p>
-          {navigation.map(({ label, icon: NavIcon, active }) => (
-            <button
-              key={label}
-              disabled={!active}
-              className={
-                "group flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-sm font-semibold transition " +
-                (active
+          {navigation.map(({ label, icon: NavIcon, href }) => {
+            const active = href !== null && pathname === href;
+            const classes =
+              "group flex w-full items-center gap-3 rounded-xl px-4 py-3.5 text-sm font-semibold transition " +
+              (href
+                ? active
                   ? "bg-gradient-to-r from-[#a82429] to-[#86191e] text-white shadow-lg shadow-black/20 ring-1 ring-white/10"
-                  : "cursor-not-allowed text-white/45")
-              }
-            >
-              <NavIcon className="h-5 w-5" />
-              {label}
-              {!active && (
+                  : "text-white/70 hover:bg-white/5 hover:text-white"
+                : "cursor-not-allowed text-white/45");
+
+            return href ? (
+              <Link
+                key={label}
+                href={href}
+                onClick={() => {
+                  if (open) onToggle();
+                }}
+                aria-current={active ? "page" : undefined}
+                className={classes}
+              >
+                <NavIcon className="h-5 w-5" />
+                {label}
+              </Link>
+            ) : (
+              <button key={label} disabled className={classes}>
+                <NavIcon className="h-5 w-5" />
+                {label}
                 <span className="ml-auto rounded-full bg-white/5 px-2 py-0.5 text-[8px] uppercase tracking-wider text-white/35">
                   Soon
                 </span>
-              )}
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="relative z-10 mx-4 mt-4 overflow-hidden rounded-2xl border border-amber-300/20 bg-white/[0.07] p-4">
