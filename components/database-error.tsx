@@ -1,13 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
 import Image from "next/image";
 import type { DatabaseQueryErrorDetails } from "@/lib/data";
 
 export function DatabaseError({ error }: { error: DatabaseQueryErrorDetails }) {
-  useEffect(() => {
-    console.error("[Supabase query error]", JSON.stringify(error, null, 2));
-  }, [error]);
+
 
   return (
     <div className="grid h-full place-items-center p-8 text-center">
@@ -21,8 +18,7 @@ export function DatabaseError({ error }: { error: DatabaseQueryErrorDetails }) {
         />
         <h1 className="mt-5 text-xl font-extrabold text-stone-900">Unable to load conversations</h1>
         <p className="mt-2 text-sm leading-6 text-stone-500">
-          Please check the Supabase connection details. The exact query error is available in the
-          browser console.
+          The server could not load dashboard data. Check the server configuration.
         </p>
       </div>
     </div>

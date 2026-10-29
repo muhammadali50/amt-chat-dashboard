@@ -1,0 +1,22 @@
+# Security review
+
+Scope: actual checkout at `/home/hamza/Documents/GitHub/amt-chat-dashboard`. Initial working tree was clean. Reviewed tracked source/configuration, all routes, database definitions and migrations, dependency lockfile, environment examples, and six reachable Git commits before editing. The separate unfinished copy was inspected as unverified reference; selected auth primitives were reviewed and adapted, with independent route/data authorization and tests added here.
+
+Initial findings: unauthenticated pages and visitor-history API; browser Supabase client; unconditional public conversation/message read policies; public realtime subscriptions; missing visitor table creation SQL; outdated dependencies. No hosting configuration or local real environment files were present. No changes were deployed or pushed.
+
+Credential scan: recognizable JWT credentials, Supabase secret keys, provider tokens, private keys, and historical environment filenames were checked without printing values. No matching leaked credentials were found in reachable history. This is a heuristic scan, not proof that arbitrary passwords or deleted/unreachable Git objects contain no secrets. Hosting settings, Supabase settings, remote branches not fetched, logs, and outside repositories were not inspected. Public Supabase anon keys are identifiers, not privileged secrets; access is secured with grants/RLS. Rotate any service-role/API credential previously exposed through browser bundles, source, chat, or logs. No specific leaked credential requiring rotation was identified in the inspected project.
+
+Deployment prerequisites: apply the SQL migrations and configure the private environment variables. Live Supabase policies/grants, externally defined views/functions, real Redis execution/eviction settings, TLS/proxy behavior, and public website tracking writes require post-deployment verification. Revoking browser table access may affect other integrations using anon or Supabase authenticated keys; trusted service-role integrations continue to work.
+
+Design: opaque 256-bit sessions, Redis stores only a secret/password-bound SHA-256 lookup key with eight-hour TTL; passwords and raw tokens are never stored in Redis. Constant-time password digest comparison. Redis command failures fail closed. Exact-origin CSRF checks apply to login/logout. CSP uses a fresh nonce for Next.js inline scripts, with no script unsafe-inline in production. Styles permit inline values required by the dashboard. Static JavaScript/CSS is public, containing UI code but no private data or secrets. Other resources are protected by the proxy. New private data handlers must retain their own auth checks as defense in depth.
+
+## Verified results
+
+- `npm run build`: passed with Next.js 16.4.3 using webpack; Next.js also completed TypeScript checking. Turbopack was blocked by this execution environment's local-port restriction, including an escalated retry, so the supported webpack builder is the saved build command.
+- `node node_modules/typescript/bin/tsc --noEmit`: passed.
+- `npm run test:security`: 24 configuration/rotation/store-response assertions and 49 production HTTP assertions passed (73 total). Three Next.js server processes shared a TLS Redis REST test double. Verified both protected pages, direct resources/APIs, malformed and forged cookies, simulated eight-hour expiry, session sharing across instances, failed logout during store outage, successful revocation across instances, missing settings, cross-origin/missing-origin CSRF, concurrent shared rate limiting and cooldown, security headers, CSP script nonce, and tracking preflight/origin/body handling.
+- `npm audit`: zero known vulnerabilities in the installed dependency tree after updates (Next.js 16.4.3, React 19.3.1, Supabase JS 2.118.0).
+- `npm run scan:secrets`: no matches in reachable Git blobs (including binary artifacts) and local project files; credential values suppressed.
+- `git diff --check`: passed.
+
+Not executed or verified: SQL against PostgreSQL/Supabase (no database server or credentials available), live anonymous PostgREST/realtime denial, managed Redis Lua/TTL behavior, authenticated live-data rendering, browser hydration/interaction against live data, hosting secret values and configuration, deployment HTTPS/cookie behavior, and actual public-website tracking writes. HTTP tests verified tracking origin compatibility and input validation, not database writes. Apply migrations and perform those live checks before treating the deployed system as secured.

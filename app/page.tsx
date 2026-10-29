@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth-server";
 import { ConversationDashboard } from "@/components/conversation-dashboard";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { DatabaseError } from "@/components/database-error";
@@ -11,6 +12,7 @@ import type { Conversation } from "@/types/database";
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
+  await requireAdmin();
   let conversations: Conversation[] = [];
   let demo = false;
   let queryError: DatabaseQueryErrorDetails | null = null;

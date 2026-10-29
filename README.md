@@ -1,24 +1,36 @@
-# A Mustafa Traders Chat Dashboard
+# A Mustafa Traders private dashboard
 
-A responsive Facebook, Instagram, and WhatsApp conversation dashboard for A Mustafa Traders. It is built with Next.js App Router, TypeScript, Tailwind CSS, and optional Supabase realtime data.
+Next.js App Router dashboard for conversations and website visitors. All dashboard pages, images, and APIs require an admin session. Only the standalone login form, login/logout handlers, compiled static UI assets, and write-only website tracking endpoint are public. Page components, data functions, and API handlers also enforce authentication independently of the request proxy. No database credentials or direct Supabase access are included in browser code.
 
-## Run locally
+## Private configuration
 
-1. Run \`npm install\`.
-2. Copy \`.env.example\` to \`.env.local\`.
-3. Leave the environment values empty to use the built-in AMT demo conversations.
-4. Run \`npm run dev\` and open [http://localhost:3000](http://localhost:3000).
+Use Node.js 22 LTS or newer (Next.js requires at least 20.9). Run `npm ci`. Copy `.env.example` to the ignored `.env.local`, and edit it privately in your editor. In hosting, set the same values through the project's secret/environment manager. Never paste passwords or keys into chat, command arguments, source files, or `NEXT_PUBLIC_` variables.
 
-## Optional Supabase connection
+- `ADMIN_PASSWORD`: unique, randomly generated password, 20–1024 characters. A password manager can generate and store it.
+- `SESSION_SECRET`: independent random secret of at least 32 characters, generated privately with a password manager.
+- `APP_ORIGIN`: exact dashboard origin, such as `https://dashboard.your-domain.com`, without a trailing slash. Production requires HTTPS. For `npm run dev`, use `http://localhost:3000`.
+- `AUTH_REDIS_REST_URL` and `AUTH_REDIS_REST_TOKEN`: HTTPS Redis REST endpoint and private token (for example, Upstash). It must support GET, SET with EX, DEL, and EVAL. All dashboard instances must use the same store and secret. Use an isolated database and a no-eviction policy; eviction of rate-limit keys weakens throttling.
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: server-only Supabase settings. Remove the old `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `NEXT_PUBLIC_SUPABASE_URL` settings.
+- `WEBSITE_TRACKING_ALLOWED_ORIGINS`: exact comma-separated public website origins. The existing AMT origins are the defaults.
 
-Run \`supabase/schema.sql\` in the Supabase SQL editor, optionally run \`supabase/seed.sql\`, then add your Supabase project URL, anon key, and service role key to \`.env.local\`. The anon key is used by the existing browser/dashboard client. Privileged server code can use \`getSupabaseAdminClient\` from \`lib/supabase-admin.ts\`; the module is server-only and must never be imported into client components. Keep \`SUPABASE_SERVICE_ROLE_KEY\` private.
+Missing/invalid auth settings or an unavailable session store block private access. There is no development authentication bypass. Production cookies use `__Host-`, Secure, HttpOnly, SameSite=Strict, Path=/, and an eight-hour absolute lifetime. Local development uses an HTTP-compatible cookie name. Password or session-secret rotation invalidates all sessions. Logout deletes the shared session before expiring the cookie; a store failure returns 503 and must be retried.
 
-To enable WhatsApp conversations on an existing database, run \`supabase/migrations/20261011000000_add_whatsapp_platform.sql\` in the SQL editor. Store each WhatsApp customer thread in \`conversations\` with \`platform = 'whatsapp'\`, and its incoming/outgoing messages in \`messages\`; the dashboard loads these rows and receives realtime updates.
+Login accepts at most 30 attempts globally per 15-minute fixed window using an atomic Redis Lua counter, including successful attempts. This protects across server instances and cannot be bypassed with forged forwarding headers. The global limit deliberately trades availability for resistance to distributed guessing; an attacker can temporarily prevent new logins. Existing sessions continue working. Protect the deployment with hosting-level request limits as appropriate. Login/logout require an exact Origin match and reject cross-site Fetch Metadata; all other dashboard operations are read-only. A proxy must preserve the browser's Origin header.
 
-The dashboard is intentionally read-only. Authentication and reply controls should be added before production use.
+## Database migration and deployment
 
-## Website visitor tracking API
+1. Back up the database. For a fresh project, apply `supabase/schema.sql`. Do not run demo seeds on a production database.
+2. Apply SQL files in `supabase/migrations` in filename order, skipping those already recorded as applied. The added foundational visitor migration handles the visitor tables that were previously absent from this repository. The final `20261029000000_private_dashboard.sql` runs atomically, removes **all existing policies** and anonymous/authenticated grants on the four dashboard tables, and removes those tables from public realtime publication. The service role retains access. Review other applications that use these tables before applying it: browser clients using anon or Supabase authenticated credentials will lose access. Trusted server integrations using service-role credentials continue working.
+3. Set all private environment settings in the hosting secret manager. Build with `npm run build`; serve with `npm start` on a Next.js-capable host. Static export is unsupported. Use HTTPS and keep the Redis store private. Do not add CDN caching for dashboard responses or bypass the application proxy.
+4. Deploy only after settings and SQL are ready. Verify anonymous REST reads against all four Supabase tables are denied, and check actual policies, views, grants, and any other externally provisioned objects in the live project. Database owner/service-role access remains privileged by design.
+5. Verify login, both dashboard pages, message refresh, visitor history, logout, and the public website's tracking requests in the deployed environment.
 
-The public A Mustafa Traders website posts `page_view`, `page_duration`, and `identify` actions to `/api/track`. The browser only sends its `visitor_key` and a unique `page_visit_key`; all database writes use the server-only `SUPABASE_SERVICE_ROLE_KEY`. The API accepts requests from `https://www.amustafatraders.com` and `https://amustafatraders.com` by default. Set `WEBSITE_TRACKING_ALLOWED_ORIGINS` in the dashboard deployment to the exact comma-separated website origins when changing the allowed origins.
+## Public website tracking impact
 
-Before deploying this API update, run `supabase/migrations/20261011010000_add_website_page_visit_key.sql` in the Supabase SQL editor. It adds a unique page visit key so retries do not create duplicate page-history rows and duration updates target the existing visit. The dashboard no longer records its own page visits; only the public website tracker should populate the visitor list.
+`/api/track` remains public and write-only so the public AMT website can record `page_view`, `page_duration`, and `identify` without the admin password. Its allowed-origin CORS rules and payload remain compatible; no visitor website script change is required. It uses server-only Supabase credentials, so the private-data migration does not revoke its access. Request bodies now have a streamed 16 KiB limit, including requests without Content-Length.
+
+Origin/CORS is a browser control, not proof of a real visitor: non-browser callers can forge Origin and submit fabricated telemetry. Visitor keys identify telemetry records, not authenticated people; `identify` is self-reported. This change does not establish trustworthy visitor identity or eliminate telemetry spam. Restricting this endpoint to admins would stop public website tracking. The actual website script and live deployment were not available for end-to-end verification. Dashboard conversation updates now poll authenticated APIs every 10 seconds instead of subscribing to public Supabase realtime.
+
+## Verification
+
+Run `npm run build`, `npx tsc --noEmit`, `npm audit`, `npm run scan:secrets`, and `npm run test:security`. The security suite starts three production servers and an isolated TLS Redis REST test double, uses ephemeral random credentials, and tests direct URLs and APIs, forged sessions, shared sessions, expiry, CSRF, atomic shared throttling, logout revocation, missing settings, store outages, headers, and tracking origin compatibility. It requires Node.js and OpenSSL and does not use live infrastructure or secrets. It simulates Redis expiration; it does not certify a managed Redis provider. See `SECURITY-REVIEW.md` for findings and verification limits.

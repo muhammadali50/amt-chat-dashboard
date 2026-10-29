@@ -75,6 +75,7 @@ export function Sidebar({
           </div>
         </div>
 
+        <form className="relative z-10 px-5 pt-4" action="/api/auth/logout" method="post"><button className="text-sm underline">Sign out</button></form>
         <nav className="relative z-10 space-y-2 p-4 pt-7">
           <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">
             Workspace

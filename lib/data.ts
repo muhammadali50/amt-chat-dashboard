@@ -1,5 +1,6 @@
-import { mockConversations, mockMessages } from "@/lib/mock-data";
-import { getSupabaseClient } from "@/lib/supabase";
+import "server-only";
+import { getSupabaseAdminClient as getSupabaseClient } from "@/lib/supabase-admin";
+import { requireAdmin } from "./auth-server";
 import type { Conversation, Message } from "@/types/database";
 
 export interface DatabaseQueryErrorDetails {
@@ -37,7 +38,8 @@ function throwQueryError(
     hint: error.hint ?? null
   };
 
-  console.error("[Supabase] " + query + " failed", info);
+  info.message = "Database query failed.";
+  info.details = null; info.hint = null;
   throw new DatabaseQueryError(info);
 }
 
@@ -45,11 +47,8 @@ export async function getConversations(): Promise<{
   data: Conversation[];
   demo: boolean;
 }> {
+  await requireAdmin();
   const supabase = getSupabaseClient();
-
-  if (!supabase) {
-    return { data: mockConversations, demo: true };
-  }
 
   const { data, error, status } = await supabase
     .from("conversations")
@@ -62,11 +61,8 @@ export async function getConversations(): Promise<{
 }
 
 export async function getMessages(conversationId: string): Promise<Message[]> {
+  await requireAdmin();
   const supabase = getSupabaseClient();
-
-  if (!supabase) {
-    return mockMessages.filter((item) => item.conversation_id === conversationId);
-  }
 
   const { data, error, status } = await supabase
     .from("messages")
@@ -77,49 +73,5 @@ export async function getMessages(conversationId: string): Promise<Message[]> {
   if (error) throwQueryError("getMessages", status, error);
 
   return data ?? [];
-}
-
-export function subscribeToMessages(onInsert: (message: Message) => void) {
-  const supabase = getSupabaseClient();
-
-  if (!supabase) return () => undefined;
-
-  const channel = supabase
-    .channel("amt-dashboard-messages")
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "messages" },
-      (payload) => onInsert(payload.new as Message)
-    )
-    .subscribe();
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
-}
-
-export function subscribeToConversations(
-  onChange: (conversation: Conversation) => void
-) {
-  const supabase = getSupabaseClient();
-
-  if (!supabase) return () => undefined;
-
-  const channel = supabase
-    .channel("amt-dashboard-conversations")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: "conversations" },
-      (payload) => {
-        if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
-          onChange(payload.new as Conversation);
-        }
-      }
-    )
-    .subscribe();
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
 }
 

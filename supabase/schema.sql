@@ -52,25 +52,6 @@ for each row execute function public.set_updated_at();
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
 
-drop policy if exists "Public read conversations" on public.conversations;
-create policy "Public read conversations"
-on public.conversations for select using (true);
-
-drop policy if exists "Public read messages" on public.messages;
-create policy "Public read messages"
-on public.messages for select using (true);
-
-do $$
-begin
-  alter publication supabase_realtime add table public.conversations;
-exception when duplicate_object then null;
-end $$;
-
-do $$
-begin
-  alter publication supabase_realtime add table public.messages;
-exception when duplicate_object then null;
-end $$;
-
--- This MVP only exposes read access. Keep future write credentials server-side.
-
+-- No public dashboard policies or realtime publication.
+revoke all on public.conversations, public.messages from public, anon, authenticated;
+grant all on public.conversations, public.messages to service_role;

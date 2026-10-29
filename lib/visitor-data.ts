@@ -1,4 +1,5 @@
 import "server-only";
+import { requireAdmin } from "./auth-server";
 
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -18,6 +19,7 @@ export type VisitorSummary = {
 };
 
 export async function getVisitorSummaries(): Promise<VisitorSummary[]> {
+  await requireAdmin();
   const supabase = getSupabaseAdminClient();
   const { data: visitors, error } = await supabase
     .from("website_visitors")

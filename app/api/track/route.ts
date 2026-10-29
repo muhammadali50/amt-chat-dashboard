@@ -1,3 +1,4 @@
+import { boundedText } from "@/lib/request-body";
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -190,7 +191,8 @@ export async function POST(request: Request) {
 
   let body: TrackBody;
   try {
-    body = (await request.json()) as TrackBody;
+    body = JSON.parse(await boundedText(request, 16384)) as TrackBody;
+    if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("Invalid body");
   } catch {
     return jsonResponse(request, { error: "Invalid request." }, 400);
   }

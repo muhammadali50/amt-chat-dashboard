@@ -1,3 +1,4 @@
+import { requireAdmin } from "@/lib/auth-server";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { VisitorsDashboard } from "@/components/visitors-dashboard";
 import { getVisitorSummaries } from "@/lib/visitor-data";
@@ -5,6 +6,7 @@ import { getVisitorSummaries } from "@/lib/visitor-data";
 export const dynamic = "force-dynamic";
 
 export default async function VisitorsPage() {
+  await requireAdmin();
   try {
     const visitors = await getVisitorSummaries();
     return (

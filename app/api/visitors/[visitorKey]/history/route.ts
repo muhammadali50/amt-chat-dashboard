@@ -1,3 +1,4 @@
+import { apiAuth } from "@/lib/auth-server";
 import { NextResponse } from "next/server";
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
@@ -10,6 +11,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ visitorKey: string }> }
 ) {
+  const denied = await apiAuth(); if (denied) return denied;
   const { visitorKey } = await params;
   if (!uuidPattern.test(visitorKey)) {
     return NextResponse.json({ error: "Visitor not found." }, { status: 404 });

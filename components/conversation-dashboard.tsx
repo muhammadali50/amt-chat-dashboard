@@ -11,9 +11,8 @@ import {
 import { PlatformBadge } from "@/components/platform-badge";
 import {
   getMessages,
-  subscribeToConversations,
-  subscribeToMessages
-} from "@/lib/data";
+  subscribeToConversations
+} from "@/lib/chat-client";
 import type { Conversation, Message, Platform } from "@/types/database";
 
 type Filter = "all" | Platform;
@@ -133,9 +132,10 @@ export function ConversationDashboard({
         if (active) setLoading(false);
       });
 
-    return () => {
-      active = false;
-    };
+    const timer = setInterval(() => {
+      void getMessages(selected.id).then(items => { if (active) setMessages(items); }).catch(() => { if (active) setError("Could not refresh messages."); });
+    }, 10000);
+    return () => { active = false; clearInterval(timer); };
   }, [selected]);
 
   useEffect(() => {
@@ -149,53 +149,10 @@ export function ConversationDashboard({
     return () => cancelAnimationFrame(frame);
   }, [loading, messages, selected?.id]);
 
-  useEffect(
-    () =>
-      subscribeToMessages((message) => {
-        if (message.conversation_id === selected?.id) {
-          setMessages((current) =>
-            current.some((item) => item.id === message.id)
-              ? current
-              : [...current, message]
-          );
-        }
-
-        setConversations((current) =>
-          current
-            .map((item) =>
-              item.id === message.conversation_id
-                ? {
-                    ...item,
-                    last_message: message.message,
-                    last_message_at: message.created_at,
-                    updated_at: message.created_at
-                  }
-                : item
-            )
-            .sort(
-              (first, second) =>
-                Date.parse(second.last_message_at) - Date.parse(first.last_message_at)
-            )
-        );
-      }),
-    [selected?.id]
-  );
-
-  useEffect(
-    () =>
-      subscribeToConversations((conversation) => {
-        setConversations((current) =>
-          [conversation, ...current.filter((item) => item.id !== conversation.id)].sort(
-            (first, second) =>
-              Date.parse(second.last_message_at) - Date.parse(first.last_message_at)
-          )
-        );
-        setSelected((current) =>
-          current?.id === conversation.id ? conversation : current
-        );
-      }),
-    []
-  );
+  useEffect(() => subscribeToConversations((rows) => {
+    setConversations(rows);
+    setSelected(current => current ? rows.find(row => row.id === current.id) ?? null : null);
+  }), []);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
