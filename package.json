@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "test:security": "node tests/auth-config.mjs && node tests/security.mjs",
-    "scan:secrets": "python3 scripts/scan-secrets.py"
+    "scan:secrets": "python3 scripts/scan-secrets.py",
+    "test:browser": "node tests/browser-origin.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",

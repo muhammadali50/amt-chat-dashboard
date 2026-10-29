@@ -20,3 +20,11 @@ Design: opaque 256-bit sessions, Redis stores only a secret/password-bound SHA-2
 - `git diff --check`: passed.
 
 Not executed or verified: SQL against PostgreSQL/Supabase (no database server or credentials available), live anonymous PostgREST/realtime denial, managed Redis Lua/TTL behavior, authenticated live-data rendering, browser hydration/interaction against live data, hosting secret values and configuration, deployment HTTPS/cookie behavior, and actual public-website tracking writes. HTTP tests verified tracking origin compatibility and input validation, not database writes. Apply migrations and perform those live checks before treating the deployed system as secured.
+
+## Native form login regression fix
+
+Found and reproduced a conflict between `Referrer-Policy: no-referrer` and the strict Origin-based CSRF checks: Chromium submits the native HTML login form with `Origin: null`, which correctly fails the check. The earlier HTTP-only suite manually supplied Origin and did not exercise this browser behavior.
+
+Changed the policy to `same-origin`, preserving native same-origin form origins while suppressing cross-site referrers. Did not relax the CSRF validator or allow null origins. Added a real Chromium regression test using the actual login HTML and configured policy with dummy loopback requests, plus assertions checking the production response header and rejection of literal null origins.
+
+Verification: production build and standalone TypeScript passed; 24 configuration assertions and 51 production HTTP assertions passed. Chromium reproduced the old failure and verified the fixed policy (3 assertions). Live deployed login remains unverified until the user pushes and deploys this fix. No credentials were requested or printed; no commit, push, or deployment was performed.

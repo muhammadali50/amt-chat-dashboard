@@ -45,6 +45,8 @@ try {
   await status(path,401);await status(path,401,{headers:{cookie:'__Host-amt_admin='+ 'f'.repeat(64),'x-middleware-subrequest':'middleware:middleware:middleware:middleware:middleware'}});
  }
  let r=await status('/login',200);assert.match(await r.text(),/type="password"/);assert.match(r.headers.get('content-security-policy'),/frame-ancestors 'none'/);assert.match(r.headers.get('cache-control'),/no-store/);checks+=3;
+ assert.equal(r.headers.get('referrer-policy'),'same-origin');checks++;
+ assert.equal((await post('/api/auth/login','password=x','','null')).status,403);checks++;
  assert.equal((await post('/api/auth/login','password=x','','https://evil.test')).status,403);checks++;
  assert.equal((await post('/api/auth/login','password=x','','')).status,403);checks++;
  assert.equal((await post('/api/auth/login','password=wrong')).status,401);checks++;
